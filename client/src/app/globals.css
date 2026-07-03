@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-muted: var(--muted);
+  --color-player1: var(--player1);
+  --color-player2: var(--player2);
+  --color-glass-bg: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-glass: var(--shadow-glass);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-glow: var(--shadow-glow);
+
+  --spacing-0: 0px;
+  --spacing-1: 0.125rem;
+  --spacing-2: 0.25rem;
+  --spacing-3: 0.5rem;
+  --spacing-4: 0.75rem;
+  --spacing-5: 1rem;
+  --spacing-6: 1.5rem;
+  --spacing-7: 2rem;
+  --spacing-8: 3rem;
+  --spacing-9: 4rem;
+  --spacing-10: 6rem;
+  --spacing-11: 8rem;
+
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-slide-up: slide-up 0.5s ease-out;
+  --animate-scale-in: scale-in 0.3s ease-out;
+  --animate-glow: glow 2s ease-in-out infinite;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+  --primary-dark: #2563eb;
+  --secondary: #8b5cf6;
+  --success: #10b981;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --surface: #ffffff;
+  --surface-elevated: #f5f5f5;
+  --border: #e5e5e5;
+  --border-light: #f0f0f0;
+  --muted: #737373;
+  --player1: #3b82f6;
+  --player2: #ef4444;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --shadow-soft: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --primary: #60a5fa;
+  --primary-light: #93c5fd;
+  --primary-dark: #3b82f6;
+  --secondary: #a78bfa;
+  --success: #34d399;
+  --error: #f87171;
+  --warning: #fbbf24;
+  --surface: #1a1a1a;
+  --surface-elevated: #262626;
+  --border: #333333;
+  --border-light: #2a2a2a;
+  --muted: #a3a3a3;
+  --player1: #60a5fa;
+  --player2: #f87171;
+  --glass-bg: rgba(0, 0, 0, 0.3);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-soft: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(96, 165, 250, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--primary);
+  color: white;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: high) {
+  :root {
+    --border: #000000;
+    --muted: #4a4a4a;
+  }
+  .dark {
+    --border: #ffffff;
+    --muted: #cccccc;
+  }
+}
