@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dots & Boxes",
-  description: "A premium Dots and Boxes game. Beautiful, minimal, and fast.",
+  title: { default: "Dots & Boxes", template: "%s | Dots & Boxes" },
+  description: "A premium Dots and Boxes game. Beautiful, minimal, and fast. Play locally, vs AI, or online with friends.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -24,6 +24,11 @@ export const metadata: Metadata = {
   },
   icons: {
     apple: "/icons/icon-192.png",
+  },
+  openGraph: {
+    title: "Dots & Boxes",
+    description: "A classic game reimagined. Beautiful, minimal, and incredibly smooth.",
+    type: "website",
   },
 };
 

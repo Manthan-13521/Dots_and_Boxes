@@ -133,12 +133,70 @@ describe("Game Engine", () => {
       const score = evaluate(state, 1);
       expect(typeof score).toBe("number");
     });
+
+    it("returns higher score for leading player", () => {
+      const state = createFreshBoard(2, 2);
+      state.scores = [2, 0];
+      const p1Score = evaluate(state, 1);
+      const p2Score = evaluate(state, 2);
+      expect(p1Score).toBeGreaterThan(p2Score);
+    });
   });
 
   describe("isGameOver", () => {
     it("returns false for a new game", () => {
       const state = createFreshBoard();
       expect(isGameOver(state)).toBe(false);
+    });
+
+    it("returns true when game is finished", () => {
+      const config = { rows: 1, cols: 1 };
+      let state = createInitialState(config);
+      state = applyMove(state, { type: "H", row: 0, col: 0 }, 1);
+      state = applyMove(state, { type: "H", row: 1, col: 0 }, 2);
+      state = applyMove(state, { type: "V", row: 0, col: 0 }, 1);
+      state = applyMove(state, { type: "V", row: 0, col: 1 }, 2);
+      expect(isGameOver(state)).toBe(true);
+    });
+  });
+
+  describe("draw detection", () => {
+    it("detects a draw when scores are equal", () => {
+      const config = { rows: 2, cols: 2 };
+      let state = createInitialState(config);
+      const moves = getValidMoves(state);
+      for (const move of moves) {
+        state = applyMove(state, move, state.currentPlayer);
+      }
+      expect(state.status).toBe("finished");
+      expect(state.winner).toBe(0);
+    });
+  });
+
+  describe("serialize / deserialize", () => {
+    it("round-trips a game state", () => {
+      const state = createFreshBoard(3, 3);
+      const json = JSON.stringify(state);
+      const parsed = JSON.parse(json);
+      expect(parsed.config.rows).toBe(3);
+      expect(parsed.config.cols).toBe(3);
+    });
+  });
+
+  describe("multiple box capture", () => {
+    it("can capture two boxes in one move on 2x2", () => {
+      let state = createFreshBoard(2, 2);
+      state = applyMove(state, { type: "H", row: 0, col: 0 }, 1);
+      state = applyMove(state, { type: "H", row: 1, col: 0 }, 2);
+      state = applyMove(state, { type: "H", row: 2, col: 0 }, 1);
+      state = applyMove(state, { type: "V", row: 0, col: 0 }, 2);
+      state = applyMove(state, { type: "V", row: 1, col: 0 }, 1);
+      state = applyMove(state, { type: "V", row: 0, col: 1 }, 2);
+      state = applyMove(state, { type: "V", row: 1, col: 1 }, 1);
+      state = applyMove(state, { type: "H", row: 0, col: 1 }, 2);
+      state = applyMove(state, { type: "H", row: 1, col: 1 }, 1);
+      state = applyMove(state, { type: "H", row: 2, col: 1 }, 2);
+      expect(state.boxes[0][0]).not.toBe(0);
     });
   });
 });

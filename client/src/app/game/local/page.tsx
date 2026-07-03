@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Board } from "@/components/game/Board";
+import { TurnBanner } from "@/components/game/TurnBanner";
 import { Button, Card, Badge } from "@/components/ui";
 import { useGameStore } from "@/stores/gameStore";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,7 +34,7 @@ const boardSizes = [
 function LocalGameContent() {
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") || "2p";
-  const { state, startGame, makeMove, undoMove, difficulty, setDifficulty, moveHistory } = useGameStore();
+  const { state, startGame, makeMove, undoMove, difficulty, setDifficulty, moveHistory, isThinking } = useGameStore();
   const [gameStarted, setGameStarted] = useState(false);
   const [selectedSize, setSelectedSize] = useState("5x5");
   const showResult = gameStarted && state?.status === "finished";
@@ -133,7 +134,6 @@ function LocalGameContent() {
 
   const p1Score = state?.scores[0] ?? 0;
   const p2Score = state?.scores[1] ?? 0;
-  const isP1Turn = state?.currentPlayer === 1;
 
   return (
     <main className="min-h-dvh flex flex-col p-4 sm:p-6">
@@ -147,7 +147,7 @@ function LocalGameContent() {
           {state?.config.rows}x{state?.config.cols}
         </Badge>
         <div className="flex items-center gap-1">
-          {(isSolo || (!isAI && mode !== "ai")) && moveHistory.length > 0 && (
+          {!isAI && moveHistory.length > 0 && (
             <Button variant="ghost" size="icon" onClick={undoMove} aria-label="Undo last move">
               <Undo className="h-4 w-4" />
             </Button>
@@ -158,30 +158,42 @@ function LocalGameContent() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-8 mb-6">
-        <div className={`flex flex-col items-center gap-1 transition-opacity ${isP1Turn ? "opacity-100" : "opacity-40"}`}>
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "var(--player1)" }} />
-          <span className="text-sm font-medium">{displayPlayer}</span>
+      <TurnBanner
+        currentPlayer={state?.currentPlayer ?? 1}
+        playerNumber={isAI ? 1 : isSolo ? 1 : null}
+        labels={{ 1: displayPlayer, 2: isSolo ? "Opponent" : isAI ? "AI" : "Player 2" }}
+        gameStatus={state?.status ?? "waiting"}
+        className="mb-4"
+      />
+
+      <div className="flex items-center justify-center gap-8 mb-4">
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "var(--player1)" }} />
+            <span className="text-sm font-medium text-muted">{displayPlayer}</span>
+          </div>
           <motion.span
-            key={p1Score}
+            key={`p1-${p1Score}`}
             initial={{ scale: 1.3 }}
             animate={{ scale: 1 }}
-            className="text-2xl font-bold font-mono"
+            className="text-3xl font-bold font-mono"
           >
             {p1Score}
           </motion.span>
         </div>
 
-        <div className="text-muted text-sm font-mono">vs</div>
+        <div className="text-muted text-xs font-mono">vs</div>
 
-        <div className={`flex flex-col items-center gap-1 transition-opacity ${isP1Turn ? "opacity-40" : "opacity-100"}`}>
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "var(--player2)" }} />
-          <span className="text-sm font-medium">{isSolo ? "Opponent" : isAI ? "AI" : "Player 2"}</span>
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "var(--player2)" }} />
+            <span className="text-sm font-medium text-muted">{isSolo ? "Opponent" : isAI ? "AI" : "Player 2"}</span>
+          </div>
           <motion.span
-            key={p2Score}
+            key={`p2-${p2Score}`}
             initial={{ scale: 1.3 }}
             animate={{ scale: 1 }}
-            className="text-2xl font-bold font-mono"
+            className="text-3xl font-bold font-mono"
           >
             {p2Score}
           </motion.span>
@@ -189,15 +201,16 @@ function LocalGameContent() {
       </div>
 
       <div className="flex-1 flex items-center justify-center">
-        {state && (
-          <Board
-            state={state}
-            onMove={handleMove}
-            currentPlayer={state.currentPlayer}
-            disabled={state.status !== "playing"}
-            className="max-w-[500px] w-full"
-          />
-        )}
+          {state && (
+            <Board
+              state={state}
+              onMove={handleMove}
+              currentPlayer={state.currentPlayer}
+              disabled={state.status !== "playing" || isThinking}
+              className="max-w-[500px] w-full"
+              isThinking={isThinking}
+            />
+          )}
       </div>
 
       <Confetti active={showResult && state?.winner !== null && state?.winner !== 0} />

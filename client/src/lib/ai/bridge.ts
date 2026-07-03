@@ -34,23 +34,27 @@ function getWorker(): Worker {
   };
 
   worker.onerror = (err) => {
-    for (const [id, pending] of pendingRequests) {
+    const entries = Array.from(pendingRequests.entries());
+    pendingRequests.clear();
+    for (const [, pending] of entries) {
       pending.reject(new Error(`Worker error: ${err.message || "unknown"}`));
-      pendingRequests.delete(id);
     }
+    worker?.terminate();
+    worker = null;
   };
 
   return worker;
 }
 
 export function terminateWorker() {
+  const entries = Array.from(pendingRequests.entries());
+  pendingRequests.clear();
   if (worker) {
     worker.terminate();
     worker = null;
   }
-  for (const [id, pending] of pendingRequests) {
+  for (const [, pending] of entries) {
     pending.reject(new Error("Worker terminated"));
-    pendingRequests.delete(id);
   }
 }
 
@@ -61,23 +65,30 @@ export function getAIMoveAsync(
   const id = `ai_${++currentId}`;
   const timeoutMs = difficulty === "impossible" ? 10000 : 5000;
 
+  const timeoutId = setTimeout(() => {
+    const pending = pendingRequests.get(id);
+    if (pending) {
+      pendingRequests.delete(id);
+      pending.reject(new Error(`AI move timeout (${timeoutMs}ms)`));
+    }
+  }, timeoutMs);
+
   return new Promise((resolve, reject) => {
     try {
       const w = getWorker();
-      pendingRequests.set(id, { resolve, reject });
+      const wrappedResolve = (value: AIResponse) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      };
+      const wrappedReject = (reason: Error) => {
+        clearTimeout(timeoutId);
+        reject(reason);
+      };
+      pendingRequests.set(id, { resolve: wrappedResolve, reject: wrappedReject });
       w.postMessage({ id, state, difficulty });
     } catch (err) {
+      clearTimeout(timeoutId);
       reject(err);
-      return;
     }
-
-    setTimeout(() => {
-      const pending = pendingRequests.get(id);
-      if (pending) {
-        pending.reject(new Error(`AI move timeout (${timeoutMs}ms)`));
-        pendingRequests.delete(id);
-        terminateWorker();
-      }
-    }, timeoutMs);
   });
 }

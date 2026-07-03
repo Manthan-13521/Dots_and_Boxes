@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Board } from "@/components/game/Board";
+import { TurnBanner } from "@/components/game/TurnBanner";
 import { Button, Badge } from "@/components/ui";
 import { motion } from "framer-motion";
-import { ArrowLeft, Copy, Wifi, WifiOff, Loader2, Eye } from "lucide-react";
+import { ArrowLeft, Copy, Wifi, WifiOff, Loader2, Eye, RotateCcw, Trophy, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import type { Move, GameState } from "@/lib/game/types";
@@ -30,6 +31,7 @@ function OnlineRoomContent() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerNumber, setPlayerNumber] = useState<1 | 2 | null>(null);
   const [playerNames, setPlayerNames] = useState<string[]>(["Waiting...", "Waiting..."]);
+  const [opponentLeft, setOpponentLeft] = useState(false);
 
   const handleMove = useCallback(
     (move: Move) => {
@@ -40,8 +42,10 @@ function OnlineRoomContent() {
     [gameState, playerNumber, roomCode, isSpectator]
   );
 
+
+
   useEffect(() => {
-    const s = io(SOCKET_URL, { timeout: 5000 });
+    const s = io(SOCKET_URL, { transports: ["websocket", "polling"], timeout: 5000 });
 
     s.on("connect", () => {
       setConnectionStatus("connected");
@@ -52,11 +56,14 @@ function OnlineRoomContent() {
       }
     });
 
-    s.on("room:joined", ({ room }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number }; spectator?: boolean } }) => {
+    s.on("room:joined", ({ room }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number } } }) => {
       if (!isSpectator) {
         setPlayerNumber(room.players.length === 1 ? 1 : 2);
       }
       setPlayerNames(room.players.map((p: PlayerInfo) => p.name));
+      while (room.players.length < 2) {
+        room.players.push({ id: "", name: "Waiting..." });
+      }
       const config = room.config || { rows: 5, cols: 5 };
       setGameState(createInitialState(config));
     });
@@ -64,22 +71,26 @@ function OnlineRoomContent() {
     s.on("player:joined", ({ player }: { player: { name: string } }) => {
       setPlayerNames((prev) => {
         const next = [...prev];
-        if (!next[1] || next[1] === "Waiting...") {
+        if (next.length < 2 || next[1] === "Waiting...") {
           next[1] = player.name || "Player 2";
         }
         return next;
       });
     });
 
-    s.on("player:left", () => {
-      setConnectionStatus("disconnected");
-    });
-
-    s.on("move:made", ({ move }) => {
+    s.on("move:made", ({ move, playerNumber }: { move: Move; playerNumber: 1 | 2 }) => {
       setGameState((prev) => {
         if (!prev || prev.status !== "playing") return prev;
-        return applyMove(prev, move, prev.currentPlayer);
+        return applyMove(prev, move, playerNumber);
       });
+    });
+
+    s.on("opponent:disconnected", () => {
+      setOpponentLeft(true);
+    });
+
+    s.on("player:left", () => {
+      setOpponentLeft(true);
     });
 
     s.on("connect_error", () => {
@@ -100,6 +111,11 @@ function OnlineRoomContent() {
       s.disconnect();
     };
   }, [roomCode, isSpectator]);
+
+  const showResult = gameState?.status === "finished";
+  const resultWinner = gameState?.winner ?? null;
+  const p1Score = gameState?.scores[0] ?? 0;
+  const p2Score = gameState?.scores[1] ?? 0;
 
   return (
     <main className="min-h-dvh flex flex-col p-4 sm:p-6">
@@ -134,7 +150,7 @@ function OnlineRoomContent() {
       {connectionStatus === "connecting" && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" aria-hidden="true" />
             <p className="text-muted">{isSpectator ? "Connecting to spectator mode..." : "Connecting to room..."}</p>
           </div>
         </div>
@@ -151,22 +167,61 @@ function OnlineRoomContent() {
         </div>
       )}
 
+      {connectionStatus === "disconnected" && !gameState && (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <WifiOff className="h-8 w-8 text-muted mx-auto mb-3" aria-hidden="true" />
+            <p className="text-muted mb-4">Connection lost</p>
+            <Link href="/game/online">
+              <Button variant="secondary">Go Back</Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {connectionStatus === "connected" && gameState && (
         <>
-          <div className="flex items-center justify-center gap-8 mb-6">
-            <PlayerScoreDisplay
-              name={playerNames[0]}
-              score={gameState.scores[0]}
-              isActive={gameState.currentPlayer === 1}
-              color="var(--player1)"
-            />
-            <span className="text-muted text-sm font-mono">vs</span>
-            <PlayerScoreDisplay
-              name={playerNames[1]}
-              score={gameState.scores[1]}
-              isActive={gameState.currentPlayer === 2}
-              color="var(--player2)"
-            />
+          <TurnBanner
+            currentPlayer={gameState.currentPlayer}
+            playerNumber={isSpectator ? null : playerNumber}
+            labels={{ 1: playerNames[0] || "Player 1", 2: playerNames[1] || "Player 2" }}
+            gameStatus={gameState.status}
+            isSpectator={isSpectator}
+            className="mb-4"
+          />
+
+          <div className="flex items-center justify-center gap-8 mb-4">
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "var(--player1)" }} />
+                <span className="text-sm font-medium text-muted">{playerNames[0] || "Player 1"}</span>
+              </div>
+              <motion.span
+                key={`p1-${p1Score}`}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                className="text-3xl font-bold font-mono"
+              >
+                {p1Score}
+              </motion.span>
+            </div>
+
+            <div className="text-muted text-xs font-mono">vs</div>
+
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "var(--player2)" }} />
+                <span className="text-sm font-medium text-muted">{playerNames[1] || "Player 2"}</span>
+              </div>
+              <motion.span
+                key={`p2-${p2Score}`}
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                className="text-3xl font-bold font-mono"
+              >
+                {p2Score}
+              </motion.span>
+            </div>
           </div>
 
           <div className="flex-1 flex items-center justify-center">
@@ -178,31 +233,68 @@ function OnlineRoomContent() {
               className="max-w-[500px] w-full"
             />
           </div>
+
+          {showResult && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-glass-bg backdrop-blur-2xl border border-glass-border rounded-3xl p-8 max-w-sm w-full text-center shadow-elevated"
+              >
+                {resultWinner === null ? (
+                  <Trophy className="h-12 w-12 mx-auto mb-4 text-muted" aria-hidden="true" />
+                ) : resultWinner === 0 ? (
+                  <Trophy className="h-12 w-12 mx-auto mb-4 text-muted" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="h-12 w-12 mx-auto mb-4 text-primary" aria-hidden="true" />
+                )}
+                <h2 className="text-2xl font-bold mb-1">
+                  {resultWinner === 0
+                    ? "Draw!"
+                    : resultWinner === null
+                    ? "Game Over"
+                    : `${playerNames[resultWinner - 1]} Wins!`}
+                </h2>
+                <p className="text-muted text-sm mb-6">
+                  {p1Score} - {p2Score} &middot; {gameState.moveCount} moves
+                </p>
+                <Link href="/game/online">
+                  <Button variant="gradient" size="lg" className="w-full">
+                    <RotateCcw className="h-4 w-4" />
+                    New Game
+                  </Button>
+                </Link>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {opponentLeft && !showResult && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-glass-bg backdrop-blur-2xl border border-glass-border rounded-3xl p-8 max-w-sm w-full text-center shadow-elevated"
+              >
+                <WifiOff className="h-12 w-12 mx-auto mb-4 text-muted" aria-hidden="true" />
+                <h2 className="text-2xl font-bold mb-1">Opponent Left</h2>
+                <p className="text-muted text-sm mb-6">Your opponent has disconnected</p>
+                <Link href="/game/online">
+                  <Button variant="gradient" size="lg" className="w-full">
+                    Back to Lobby
+                  </Button>
+                </Link>
+              </motion.div>
+            </motion.div>
+          )}
         </>
-      )}
-
-      {connectionStatus === "disconnected" && !gameState && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <WifiOff className="h-8 w-8 text-muted mx-auto mb-3" />
-            <p className="text-muted mb-4">Connection lost</p>
-            <Link href="/game/online">
-              <Button variant="secondary">Go Back</Button>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {connectionStatus === "disconnected" && !gameState && (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <WifiOff className="h-8 w-8 text-muted mx-auto mb-3" />
-            <p className="text-muted mb-4">Connection lost</p>
-            <Link href="/game/online">
-              <Button variant="secondary">Go Back</Button>
-            </Link>
-          </div>
-        </div>
       )}
     </main>
   );
@@ -212,7 +304,7 @@ export default function OnlineRoomPage() {
   return (
     <Suspense fallback={
       <main className="min-h-dvh flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
       </main>
     }>
       <OnlineRoomContent />
@@ -230,30 +322,10 @@ function ConnectionBadge({ status }: { status: ConnectionStatus }) {
   const { icon: Icon, label, variant } = configs[status];
   return (
     <Badge variant={variant} size="sm">
-      <Icon className={`h-3 w-3 mr-1 ${status === "connecting" ? "animate-spin" : ""}`} />
+      <Icon className={`h-3 w-3 mr-1 ${status === "connecting" ? "animate-spin" : ""}`} aria-hidden="true" />
       {label}
     </Badge>
   );
 }
 
-function PlayerScoreDisplay({
-  name,
-  score,
-  isActive,
-  color,
-}: {
-  name: string;
-  score: number;
-  isActive: boolean;
-  color: string;
-}) {
-  return (
-    <div className={`flex flex-col items-center gap-1 transition-opacity ${isActive ? "opacity-100" : "opacity-40"}`}>
-      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-      <span className="text-sm font-medium">{name}</span>
-      <motion.span key={score} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="text-2xl font-bold font-mono">
-        {score}
-      </motion.span>
-    </div>
-  );
-}
+

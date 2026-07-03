@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { getAIMoveAsync } from "@/lib/ai/bridge";
 import { getValidMoves } from "@/lib/game/engine";
 
 export function useAIPlayer() {
-  const { state, mode, difficulty, makeMove } = useGameStore();
+  const state = useGameStore((s) => s.state);
+  const mode = useGameStore((s) => s.mode);
+  const difficulty = useGameStore((s) => s.difficulty);
+  const makeMove = useGameStore((s) => s.makeMove);
+  const setThinking = useGameStore((s) => s.setThinking);
   const processingRef = useRef(false);
-  const [isThinking, setIsThinking] = useState(false);
 
   useEffect(() => {
     if (
@@ -22,7 +25,7 @@ export function useAIPlayer() {
     }
 
     processingRef.current = true;
-    setIsThinking(true);
+    setThinking(true);
 
     let cancelled = false;
 
@@ -32,9 +35,8 @@ export function useAIPlayer() {
           makeMove(move);
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) {
-          console.warn("AI error, making random move:", err.message);
           const moves = getValidMoves(state);
           if (moves.length > 0) {
             const randomMove = moves[Math.floor(Math.random() * moves.length)];
@@ -45,16 +47,14 @@ export function useAIPlayer() {
       .finally(() => {
         if (!cancelled) {
           processingRef.current = false;
-          setIsThinking(false);
+          setThinking(false);
         }
       });
 
     return () => {
       cancelled = true;
       processingRef.current = false;
-      setIsThinking(false);
+      setThinking(false);
     };
-  }, [state, state?.currentPlayer, state?.status, mode, difficulty, makeMove]);
-
-  return { isThinking };
+  }, [state, difficulty, makeMove, setThinking, mode]);
 }

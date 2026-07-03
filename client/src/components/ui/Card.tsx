@@ -4,10 +4,14 @@ import { forwardRef } from "react";
 import { cn } from "@/lib/utils/cn";
 
 const cardVariants = {
-  glass: "bg-glass-bg backdrop-blur-2xl border border-glass-border shadow-glass",
-  elevated: "bg-surface border border-border shadow-elevated",
-  flat: "bg-surface border border-border",
-  ghost: "bg-transparent",
+  glass:
+    "bg-glass-bg backdrop-blur-xl border border-glass-border shadow-glass hover:shadow-elevated transition-shadow duration-300",
+  elevated:
+    "bg-surface border border-border shadow-elevated",
+  flat:
+    "bg-surface border border-border",
+  ghost:
+    "bg-transparent",
 };
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -23,7 +27,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
         className={cn(
           "rounded-2xl p-6 transition-all duration-200",
           cardVariants[variant],
-          interactive && "cursor-pointer hover:translate-y-[-2px] hover:shadow-elevated",
+          interactive && "cursor-pointer hover:-translate-y-[2px] hover:shadow-elevated hover:border-primary/20 active:translate-y-0",
           className
         )}
         {...props}

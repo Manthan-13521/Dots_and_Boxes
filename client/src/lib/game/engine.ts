@@ -37,22 +37,6 @@ export function getValidMoves(state: GameState): Move[] {
   return moves;
 }
 
-export function countCaptureChains(state: GameState): [number, number] {
-  const validMoves = getValidMoves(state);
-  let p1Captures = 0;
-  let p2Captures = 0;
-
-  for (const move of validMoves) {
-    const result = applyMove(state, move, state.currentPlayer);
-    const boxCount = result.lastMove!.completedBoxes.length;
-    if (state.currentPlayer === 1) {
-      p1Captures += boxCount;
-    } else {
-      p2Captures += boxCount;
-    }
-  }
-  return [p1Captures, p2Captures];
-}
 
 function getSurroundingBoxes(state: GameState, move: Move): [number, number][] {
   const boxes: [number, number][] = [];
