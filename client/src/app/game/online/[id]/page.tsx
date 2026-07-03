@@ -19,6 +19,7 @@ type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 interface PlayerInfo {
   id: string;
   name: string;
+  connected?: boolean;
 }
 
 function OnlineRoomContent() {
@@ -46,17 +47,24 @@ function OnlineRoomContent() {
 
   useEffect(() => {
     const s = io(SOCKET_URL, { transports: ["websocket", "polling"], timeout: 5000 });
+    
+    const storageKey = `dots_boxes_session_${roomCode}`;
+    const existingSessionId = sessionStorage.getItem(storageKey);
 
     s.on("connect", () => {
       setConnectionStatus("connected");
       if (isSpectator) {
         s.emit("room:spectate", { roomCode });
       } else {
-        s.emit("room:join", { roomCode, playerName: "Player" });
+        s.emit("room:join", { roomCode, playerName: "Player", sessionId: existingSessionId });
       }
     });
 
-    s.on("room:joined", ({ room }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number } } }) => {
+    s.on("room:joined", ({ room, sessionId }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number } }, sessionId?: string }) => {
+      if (sessionId) {
+        sessionStorage.setItem(`dots_boxes_session_${roomCode}`, sessionId);
+      }
+      
       if (!isSpectator) {
         setPlayerNumber(room.players.length === 1 ? 1 : 2);
       }
@@ -184,7 +192,7 @@ function OnlineRoomContent() {
         </div>
       )}
 
-      {connectionStatus === "connected" && gameState && (
+      {gameState && (
         <>
           <TurnBanner
             currentPlayer={gameState.currentPlayer}
@@ -289,11 +297,34 @@ function OnlineRoomContent() {
                 className="bg-glass-bg backdrop-blur-2xl border border-glass-border rounded-3xl p-8 max-w-sm w-full text-center shadow-elevated"
               >
                 <WifiOff className="h-12 w-12 mx-auto mb-4 text-muted" aria-hidden="true" />
-                <h2 className="text-2xl font-bold mb-1">Opponent Left</h2>
-                <p className="text-muted text-sm mb-6">Your opponent has disconnected</p>
+                <h2 className="text-2xl font-bold mb-1">Opponent Disconnected</h2>
+                <p className="text-muted text-sm mb-6">Waiting for opponent to reconnect...</p>
                 <Link href="/game/online">
                   <Button variant="gradient" size="lg" className="w-full">
-                    Back to Lobby
+                    Leave Game
+                  </Button>
+                </Link>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {connectionStatus !== "connected" && gameState && !showResult && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-glass-bg backdrop-blur-2xl border border-glass-border rounded-3xl p-8 max-w-sm w-full text-center shadow-elevated"
+              >
+                <Loader2 className="h-12 w-12 mx-auto mb-4 text-warning animate-spin" aria-hidden="true" />
+                <h2 className="text-2xl font-bold mb-1">Reconnecting...</h2>
+                <p className="text-muted text-sm mb-6">You lost connection. Attempting to restore session.</p>
+                <Link href="/game/online">
+                  <Button variant="secondary" size="lg" className="w-full">
+                    Cancel & Leave
                   </Button>
                 </Link>
               </motion.div>

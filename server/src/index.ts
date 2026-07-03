@@ -2,6 +2,8 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
+import crypto from "crypto";
+import { v4 as uuidv4 } from "uuid";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
@@ -10,9 +12,14 @@ const MAX_SPECTATORS_PER_ROOM = 50;
 const RATE_LIMIT_WINDOW = 1000;
 const MAX_MOVES_PER_WINDOW = 10;
 
+const RECONNECT_TIMEOUT_MS = process.env.RECONNECT_TIMEOUT_MS ? parseInt(process.env.RECONNECT_TIMEOUT_MS) : 60000;
+
 interface PlayerInfo {
   id: string;
+  sessionId: string;
   name: string;
+  connected: boolean;
+  disconnectTimeout?: NodeJS.Timeout;
 }
 
 interface GameState {
@@ -39,6 +46,25 @@ interface RoomState {
 }
 
 const rooms = new Map<string, RoomState>();
+
+const ipLimits = new Map<string, { joins: number; creates: number; windowStart: number }>();
+const IP_LIMIT_WINDOW = 60000;
+
+function checkIpLimit(ip: string, type: 'join' | 'create'): boolean {
+  const now = Date.now();
+  let entry = ipLimits.get(ip);
+  if (!entry || now - entry.windowStart > IP_LIMIT_WINDOW) {
+    entry = { joins: 0, creates: 0, windowStart: now };
+    ipLimits.set(ip, entry);
+  }
+  if (type === 'join') {
+    entry.joins++;
+    return entry.joins > 20;
+  } else {
+    entry.creates++;
+    return entry.creates > 5;
+  }
+}
 
 function createInitialGameState(config: { rows: number; cols: number }): GameState {
   const { rows, cols } = config;
@@ -195,9 +221,10 @@ const io = new Server(httpServer, {
 
 function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(6);
   let code = "";
   for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[bytes[i] % chars.length];
   }
   return code;
 }
@@ -214,7 +241,12 @@ function getPublicRooms() {
 
 io.on("connection", (socket) => {
   console.log(`[DEBUG] Socket Connected: ${socket.id}`);
+  const ip = socket.handshake.address;
   socket.on("room:create", ({ config }) => {
+    if (checkIpLimit(ip, 'create')) {
+      socket.emit("error", { message: "Rate limit exceeded for room creation.", code: "RATE_LIMITED" });
+      return;
+    }
     if (rooms.size >= MAX_ROOMS) {
       socket.emit("error", { message: "Server is full. Try again later.", code: "SERVER_FULL" });
       return;
@@ -234,9 +266,13 @@ io.on("connection", (socket) => {
     io.emit("rooms:updated", getPublicRooms());
   });
 
-  socket.on("room:join", ({ roomCode, playerName }) => {
+  socket.on("room:join", ({ roomCode, playerName, sessionId }) => {
     if (typeof roomCode !== "string" || !/^[A-Z0-9]{6}$/.test(roomCode)) {
       socket.emit("error", { message: "Invalid room code", code: "INVALID_CODE" });
+      return;
+    }
+    if (checkIpLimit(ip, 'join')) {
+      socket.emit("error", { message: "Rate limit exceeded.", code: "RATE_LIMITED" });
       return;
     }
     const room = rooms.get(roomCode);
@@ -244,25 +280,40 @@ io.on("connection", (socket) => {
       socket.emit("error", { message: "Room not found", code: "ROOM_NOT_FOUND" });
       return;
     }
-    if (room.players.length >= 2) {
-      socket.emit("error", { message: "Room is full", code: "ROOM_FULL" });
-      return;
+    
+    let player = sessionId ? room.players.find(p => p.sessionId === sessionId) : undefined;
+    
+    if (player) {
+      player.id = socket.id;
+      player.connected = true;
+      if (player.disconnectTimeout) {
+        clearTimeout(player.disconnectTimeout);
+        player.disconnectTimeout = undefined;
+      }
+      socket.join(roomCode);
+      console.log(`[DEBUG] Socket ${socket.id} reconnected as ${player.name} (Session: ${sessionId})`);
+    } else {
+      if (room.players.length >= 2) {
+        socket.emit("error", { message: "Room is full", code: "ROOM_FULL" });
+        return;
+      }
+      const defaultName = room.players.length === 0 ? "Player 1" : "Player 2";
+      const name = typeof playerName === "string" && playerName.length > 0
+        ? playerName.slice(0, 20)
+        : defaultName;
+      const newSessionId = uuidv4();
+      player = { id: socket.id, sessionId: newSessionId, name, connected: true };
+      room.players.push(player);
+      socket.join(roomCode);
+      console.log(`[DEBUG] Socket ${socket.id} joined room ${roomCode} as ${name} (Player ${room.players.length})`);
     }
-    const defaultName = room.players.length === 0 ? "Player 1" : "Player 2";
-    const name = typeof playerName === "string" && playerName.length > 0
-      ? playerName.slice(0, 20)
-      : defaultName;
-    const player = { id: socket.id, name };
-    room.players.push(player);
-    socket.join(roomCode);
-    console.log(`[DEBUG] Socket ${socket.id} joined room ${roomCode} as ${name} (Player ${room.players.length})`);
     
     // Ensure authoritative initial state is given
     if (!room.gameState) {
       room.gameState = createInitialGameState(room.config);
     }
     
-    socket.emit("room:joined", { roomCode, room: { players: room.players, config: room.config } });
+    socket.emit("room:joined", { roomCode, room: { players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })), config: room.config }, sessionId: player.sessionId });
     socket.emit("game:update", { gameState: room.gameState });
     
     if (room.players.length === 2) {
@@ -274,6 +325,10 @@ io.on("connection", (socket) => {
   socket.on("room:spectate", ({ roomCode }) => {
     if (typeof roomCode !== "string") {
       socket.emit("error", { message: "Invalid room code", code: "INVALID_CODE" });
+      return;
+    }
+    if (checkIpLimit(ip, 'join')) {
+      socket.emit("error", { message: "Rate limit exceeded.", code: "RATE_LIMITED" });
       return;
     }
     const room = rooms.get(roomCode);
@@ -290,7 +345,7 @@ io.on("connection", (socket) => {
     }
     socket.join(roomCode);
     console.log(`[DEBUG] Socket ${socket.id} joined room ${roomCode} as spectator`);
-    socket.emit("room:joined", { roomCode, room: { players: room.players, config: room.config }, spectator: true });
+    socket.emit("room:joined", { roomCode, room: { players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })), config: room.config }, spectator: true });
     if (room.gameState) {
       socket.emit("game:update", { gameState: room.gameState });
     }
@@ -348,14 +403,23 @@ io.on("connection", (socket) => {
     for (const [code, room] of rooms) {
       const playerIdx = room.players.findIndex((p) => p.id === socket.id);
       if (playerIdx !== -1) {
-        const removedPlayer = room.players[playerIdx];
-        room.players.splice(playerIdx, 1);
-        socket.to(code).emit("player:left", { playerId: socket.id, playerName: removedPlayer.name });
-        if (room.players.length === 0) {
-          rooms.delete(code);
-        } else {
-          socket.to(code).emit("opponent:disconnected");
-        }
+        const p = room.players[playerIdx];
+        p.connected = false;
+        socket.to(code).emit("opponent:disconnected");
+        
+        p.disconnectTimeout = setTimeout(() => {
+            const currentIdx = room.players.findIndex(pl => pl.sessionId === p.sessionId);
+            if (currentIdx !== -1 && !room.players[currentIdx].connected) {
+                const removedName = room.players[currentIdx].name;
+                room.players.splice(currentIdx, 1);
+                io.to(code).emit("player:left", { playerId: socket.id, playerName: removedName });
+                if (room.players.length === 0) {
+                    rooms.delete(code);
+                }
+                io.emit("rooms:updated", getPublicRooms());
+            }
+        }, RECONNECT_TIMEOUT_MS);
+        
         io.emit("rooms:updated", getPublicRooms());
         break;
       }
