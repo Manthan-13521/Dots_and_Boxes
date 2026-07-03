@@ -1,0 +1,18 @@
+{
+  "name": "dots-and-boxes",
+  "private": true,
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "npm run dev -w client",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build -w client && npm run build -w server",
+    "lint": "npm run lint -w client",
+    "type-check": "npm run type-check -w client",
+    "test": "npm run test -w client",
+    "clean": "rm -rf client/.next client/node_modules server/node_modules node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
