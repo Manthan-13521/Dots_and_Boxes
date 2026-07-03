@@ -34,7 +34,7 @@ interface RoomState {
   players: PlayerInfo[];
   spectators: string[];
   config: { rows: number; cols: number };
-  gameState: GameState;
+  gameState?: GameState;
   moveCounts: Map<string, { count: number; windowStart: number }>;
 }
 
@@ -154,7 +154,7 @@ function applyMoveToGameState(state: GameState, move: { type: "H" | "V"; row: nu
     }
   }
 
-  return { newState, completedBoxes };
+  return { newState, completedBoxes, success: true };
 }
 
 function isRateLimited(socketId: string, room: RoomState): boolean {
@@ -211,38 +211,6 @@ function getPublicRooms() {
   }));
 }
 
-function isMoveValid(move: unknown, config: { rows: number; cols: number }): boolean {
-  if (!move || typeof move !== "object") return false;
-  const m = move as { type?: unknown; row?: unknown; col?: unknown };
-  if (m.type !== "H" && m.type !== "V") return false;
-  if (typeof m.row !== "number" || typeof m.col !== "number") return false;
-  if (!Number.isInteger(m.row) || !Number.isInteger(m.col)) return false;
-  if (m.row < 0 || m.col < 0) return false;
-  if (m.type === "H" && m.row > config.rows) return false;
-  if (m.type === "H" && m.col >= config.cols) return false;
-  if (m.type === "V" && m.row >= config.rows) return false;
-  if (m.type === "V" && m.col > config.cols) return false;
-  return true;
-}
-
-function isRateLimited(socketId: string, room: RoomState): boolean {
-  const now = Date.now();
-  let entry = room.moveCounts.get(socketId);
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW) {
-    entry = { count: 0, windowStart: now };
-    room.moveCounts.set(socketId, entry);
-  }
-  entry.count++;
-  return entry.count > MAX_MOVES_PER_WINDOW;
-}
-
-function cleanupEmptyRooms(): void {
-  for (const [code, room] of rooms) {
-    if (room.players.length === 0 && room.spectators.length === 0) {
-      rooms.delete(code);
-    }
-  }
-}
 
 io.on("connection", (socket) => {
   console.log(`[DEBUG] Socket Connected: ${socket.id}`);
