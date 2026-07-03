@@ -1,5 +1,5 @@
 {
   "rootDirectory": "client",
-  "buildCommand": "next build",
+  "buildCommand": "npm run build:client",
   "installCommand": "npm install"
 }
