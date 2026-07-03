@@ -41,7 +41,7 @@ function OnlineRoomContent() {
   );
 
   useEffect(() => {
-    const s = io(SOCKET_URL);
+    const s = io(SOCKET_URL, { timeout: 5000 });
 
     s.on("connect", () => {
       setConnectionStatus("connected");
@@ -80,6 +80,10 @@ function OnlineRoomContent() {
         if (!prev || prev.status !== "playing") return prev;
         return applyMove(prev, move, prev.currentPlayer);
       });
+    });
+
+    s.on("connect_error", () => {
+      setConnectionStatus("error");
     });
 
     s.on("error", () => {

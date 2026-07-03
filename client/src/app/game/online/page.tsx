@@ -20,7 +20,12 @@ export default function OnlinePage() {
   const handleCreateRoom = useCallback(() => {
     setLoading(true);
     setError("");
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, { timeout: 5000 });
+    socket.on("connect_error", () => {
+      setError("Failed to connect to game server");
+      setLoading(false);
+      socket.disconnect();
+    });
     socket.emit("room:create", { config: { rows: 5, cols: 5 } });
     socket.on("room:created", ({ roomCode: code }) => {
       setCreatedRoom(code);

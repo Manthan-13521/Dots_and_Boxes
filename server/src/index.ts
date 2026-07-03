@@ -63,14 +63,13 @@ io.on("connection", (socket) => {
     const code = generateRoomCode();
     const room: RoomState = {
       code,
-      players: [{ id: socket.id, name: "Player 1" }],
+      players: [],
       spectators: [],
       config: config || { rows: 5, cols: 5 },
       gameState: null,
     };
     rooms.set(code, room);
-    socket.join(code);
-    socket.emit("room:created", { roomCode: code, room });
+    socket.emit("room:created", { roomCode: code });
     io.emit("rooms:updated", getPublicRooms());
     console.log(`Room created: ${code}`);
   });
@@ -85,12 +84,15 @@ io.on("connection", (socket) => {
       socket.emit("error", { message: "Room is full", code: "ROOM_FULL" });
       return;
     }
-    room.players.push({ id: socket.id, name: playerName || "Player 2" });
+    const defaultName = room.players.length === 0 ? "Player 1" : "Player 2";
+    room.players.push({ id: socket.id, name: playerName || defaultName });
     socket.join(roomCode);
     socket.emit("room:joined", { roomCode, room });
-    socket.to(roomCode).emit("player:joined", { player: room.players[1] });
+    if (room.players.length === 2) {
+      socket.to(roomCode).emit("player:joined", { player: room.players[1] });
+    }
     io.emit("rooms:updated", getPublicRooms());
-    console.log(`${playerName} joined room ${roomCode}`);
+    console.log(`${playerName || defaultName} joined room ${roomCode}`);
   });
 
   socket.on("room:spectate", ({ roomCode }) => {
