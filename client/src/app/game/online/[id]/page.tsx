@@ -34,6 +34,17 @@ function OnlineRoomContent() {
   const [playerNames, setPlayerNames] = useState<string[]>(["Waiting...", "Waiting..."]);
   const [opponentLeft, setOpponentLeft] = useState(false);
 
+  const [sessionId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const key = `dots_boxes_session_${roomCode}`;
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+      id = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      sessionStorage.setItem(key, id);
+    }
+    return id;
+  });
+
   const handleMove = useCallback(
     (move: Move) => {
       if (!socketRef.current || !gameState || gameState.status !== "playing" || isSpectator) return;
@@ -47,26 +58,19 @@ function OnlineRoomContent() {
 
   useEffect(() => {
     const s = io(SOCKET_URL, { transports: ["websocket", "polling"], timeout: 5000 });
-    
-    const storageKey = `dots_boxes_session_${roomCode}`;
-    const existingSessionId = sessionStorage.getItem(storageKey);
 
     s.on("connect", () => {
       setConnectionStatus("connected");
       if (isSpectator) {
         s.emit("room:spectate", { roomCode });
       } else {
-        s.emit("room:join", { roomCode, playerName: "Player", sessionId: existingSessionId });
+        s.emit("room:join", { roomCode, playerName: "Player", sessionId });
       }
     });
 
-    s.on("room:joined", ({ room, sessionId }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number } }, sessionId?: string }) => {
-      if (sessionId) {
-        sessionStorage.setItem(`dots_boxes_session_${roomCode}`, sessionId);
-      }
-      
-      if (!isSpectator) {
-        setPlayerNumber(room.players.length === 1 ? 1 : 2);
+    s.on("room:joined", ({ room, playerNumber: serverPlayerNumber, spectator }: { room: { players: PlayerInfo[]; config: { rows: number; cols: number } }, playerNumber?: number, spectator?: boolean }) => {
+      if (!spectator && serverPlayerNumber) {
+        setPlayerNumber(serverPlayerNumber as 1 | 2);
       }
       setPlayerNames(room.players.map((p: PlayerInfo) => p.name));
       while (room.players.length < 2) {
@@ -86,12 +90,10 @@ function OnlineRoomContent() {
       });
     });
 
-    s.on("game:update", ({ gameState: newGameState, timestamp }: { gameState: GameState; timestamp?: number }) => {
-      console.log(`[DEBUG] Received game:update. Version: ${newGameState.version}. BroadcastTime: ${timestamp}, ReceiveTime: ${Date.now()}`);
+    s.on("game:update", ({ gameState: newGameState }: { gameState: GameState }) => {
       setGameState((prev) => {
         if (!prev) return newGameState;
         if (prev.version && newGameState.version && prev.version >= newGameState.version) {
-          console.log(`[DEBUG] Ignored stale update. Local: ${prev.version}, Remote: ${newGameState.version}`);
           return prev;
         }
         return newGameState;
@@ -123,7 +125,7 @@ function OnlineRoomContent() {
     return () => {
       s.disconnect();
     };
-  }, [roomCode, isSpectator]);
+  }, [roomCode, isSpectator, sessionId]);
 
   const showResult = gameState?.status === "finished";
   const resultWinner = gameState?.winner ?? null;

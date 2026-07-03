@@ -301,7 +301,8 @@ io.on("connection", (socket) => {
       const name = typeof playerName === "string" && playerName.length > 0
         ? playerName.slice(0, 20)
         : defaultName;
-      const newSessionId = uuidv4();
+      // Trust client sessionId or generate one if missing (fallback)
+      const newSessionId = sessionId || uuidv4();
       player = { id: socket.id, sessionId: newSessionId, name, connected: true };
       room.players.push(player);
       socket.join(roomCode);
@@ -313,7 +314,13 @@ io.on("connection", (socket) => {
       room.gameState = createInitialGameState(room.config);
     }
     
-    socket.emit("room:joined", { roomCode, room: { players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })), config: room.config }, sessionId: player.sessionId });
+    socket.emit("room:joined", { 
+      roomCode, 
+      room: { players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })), config: room.config }, 
+      sessionId: player.sessionId,
+      playerNumber: room.players.indexOf(player) + 1
+    });
+    
     socket.emit("game:update", { gameState: room.gameState });
     
     if (room.players.length === 2) {
@@ -392,11 +399,7 @@ io.on("connection", (socket) => {
     }
 
     room.gameState = newState;
-    const broadcastTime = Date.now();
-    console.log(`[DEBUG] Move Accepted: Player ${playerNumber}. New Version: ${newState.version}, Score: ${newState.scores}, Turn: ${newState.currentPlayer}, Broadcast Time: ${broadcastTime}`);
-    
-    // Broadcast the complete authoritative game state
-    io.to(roomCode).emit("game:update", { gameState: newState, timestamp: broadcastTime });
+    io.to(roomCode).emit("game:update", { gameState: room.gameState, timestamp: Date.now() });
   });
 
   socket.on("disconnect", () => {
