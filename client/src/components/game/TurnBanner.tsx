@@ -39,7 +39,7 @@ function getTurnLabel(currentPlayer: 1 | 2, playerNumber: 1 | 2 | null, labels: 
   }
 
   return {
-    title: `${labels[currentPlayer]}'s TURN`,
+    title: "OPPONENT'S TURN",
     subtitle: "",
   };
 }
@@ -68,10 +68,10 @@ export function TurnBanner({ currentPlayer, playerNumber, labels, gameStatus, is
         className={cn(
           "relative w-full overflow-hidden rounded-2xl px-6 py-5 sm:py-6",
           "flex flex-col items-center justify-center gap-1",
-          isMyTurn && "bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800",
-          isOpponentTurn && "bg-gradient-to-r from-red-700 via-red-600 to-red-800",
-          isLocalTurn && currentPlayer === 1 && "bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800",
-          isLocalTurn && currentPlayer === 2 && "bg-gradient-to-r from-red-700 via-red-600 to-red-800",
+          isMyTurn && "bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 shadow-[0_0_25px_rgba(59,130,246,0.5)] border border-blue-400/30",
+          isOpponentTurn && "bg-gradient-to-r from-red-900 via-red-800 to-rose-900 shadow-[0_0_25px_rgba(220,38,38,0.3)] border border-red-500/20",
+          isLocalTurn && currentPlayer === 1 && "bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 shadow-[0_0_25px_rgba(59,130,246,0.5)] border border-blue-400/30",
+          isLocalTurn && currentPlayer === 2 && "bg-gradient-to-r from-red-900 via-red-800 to-rose-900 shadow-[0_0_25px_rgba(220,38,38,0.3)] border border-red-500/20",
           className
         )}
         role="status"
@@ -113,10 +113,10 @@ export function TurnBanner({ currentPlayer, playerNumber, labels, gameStatus, is
           )}
           {(isOpponentTurn || (isLocalTurn && currentPlayer === 2)) && (
             <motion.div
-              className="text-3xl sm:text-4xl"
-              animate={reducedMotion ? {} : { scale: [1, 1.05, 1] }}
+              className="text-3xl sm:text-4xl drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]"
+              animate={reducedMotion ? {} : { scale: [1, 1.1, 1], opacity: [0.7, 1, 0.7] }}
               transition={reducedMotion ? {} : {
-                duration: 2,
+                duration: 3,
                 repeat: Infinity,
                 ease: "easeInOut",
               }}
@@ -165,10 +165,10 @@ export function TurnBanner({ currentPlayer, playerNumber, labels, gameStatus, is
         <div
           className={cn(
             "absolute inset-0 rounded-2xl pointer-events-none",
-            isMyTurn && "shadow-[inset_0_0_30px_rgba(59,130,246,0.3),0_0_20px_rgba(59,130,246,0.2)]",
-            isOpponentTurn && "shadow-[inset_0_0_30px_rgba(239,68,68,0.3),0_0_20px_rgba(239,68,68,0.2)]",
-            isLocalTurn && currentPlayer === 1 && "shadow-[inset_0_0_30px_rgba(59,130,246,0.3),0_0_20px_rgba(59,130,246,0.2)]",
-            isLocalTurn && currentPlayer === 2 && "shadow-[inset_0_0_30px_rgba(239,68,68,0.3),0_0_20px_rgba(239,68,68,0.2)]",
+            isMyTurn && "shadow-[inset_0_0_30px_rgba(59,130,246,0.5),0_0_20px_rgba(59,130,246,0.4)]",
+            isOpponentTurn && "shadow-[inset_0_0_30px_rgba(239,68,68,0.4),0_0_20px_rgba(239,68,68,0.3)]",
+            isLocalTurn && currentPlayer === 1 && "shadow-[inset_0_0_30px_rgba(59,130,246,0.5),0_0_20px_rgba(59,130,246,0.4)]",
+            isLocalTurn && currentPlayer === 2 && "shadow-[inset_0_0_30px_rgba(239,68,68,0.4),0_0_20px_rgba(239,68,68,0.3)]",
           )}
         />
       </motion.div>

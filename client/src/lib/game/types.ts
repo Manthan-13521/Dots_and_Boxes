@@ -29,6 +29,7 @@ export interface GameState {
   winner: Player | 0 | null;
   lastMove: AppliedMove | null;
   moveCount: number;
+  version: number;
 }
 
 export type Difficulty = "easy" | "medium" | "hard" | "expert" | "impossible";

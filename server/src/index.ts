@@ -15,15 +15,166 @@ interface PlayerInfo {
   name: string;
 }
 
+interface GameState {
+  config: { rows: number; cols: number };
+  horizontalEdges: boolean[][];
+  verticalEdges: boolean[][];
+  boxes: number[][];
+  currentPlayer: 1 | 2;
+  scores: [number, number];
+  status: "waiting" | "playing" | "finished";
+  winner: 1 | 2 | 0 | null;
+  lastMove: { move: { type: "H" | "V"; row: number; col: number }; player: 1 | 2; completedBoxes: [number, number][] } | null;
+  moveCount: number;
+  version: number;
+}
+
 interface RoomState {
   code: string;
   players: PlayerInfo[];
   spectators: string[];
   config: { rows: number; cols: number };
+  gameState: GameState;
   moveCounts: Map<string, { count: number; windowStart: number }>;
 }
 
 const rooms = new Map<string, RoomState>();
+
+function createInitialGameState(config: { rows: number; cols: number }): GameState {
+  const { rows, cols } = config;
+  return {
+    config,
+    horizontalEdges: Array.from({ length: rows + 1 }, () => Array(cols).fill(false)),
+    verticalEdges: Array.from({ length: rows }, () => Array(cols + 1).fill(false)),
+    boxes: Array.from({ length: rows }, () => Array(cols).fill(0)),
+    currentPlayer: 1,
+    scores: [0, 0],
+    status: "playing",
+    winner: null,
+    lastMove: null,
+    moveCount: 0,
+    version: 1,
+  };
+}
+
+function isMoveValid(move: unknown, config: { rows: number; cols: number }): boolean {
+  if (!move || typeof move !== "object") return false;
+  const m = move as { type?: unknown; row?: unknown; col?: unknown };
+  if (m.type !== "H" && m.type !== "V") return false;
+  if (typeof m.row !== "number" || typeof m.col !== "number") return false;
+  if (!Number.isInteger(m.row) || !Number.isInteger(m.col)) return false;
+  if (m.row < 0 || m.col < 0) return false;
+  if (m.type === "H" && m.row > config.rows) return false;
+  if (m.type === "H" && m.col >= config.cols) return false;
+  if (m.type === "V" && m.row >= config.rows) return false;
+  if (m.type === "V" && m.col > config.cols) return false;
+  return true;
+}
+
+function getSurroundingBoxes(state: GameState, move: { type: "H" | "V"; row: number; col: number }): [number, number][] {
+  const boxes: [number, number][] = [];
+  const { rows, cols } = state.config;
+
+  if (move.type === "H") {
+    if (move.row > 0) boxes.push([move.row - 1, move.col]);
+    if (move.row < rows) boxes.push([move.row, move.col]);
+  } else {
+    if (move.col > 0) boxes.push([move.row, move.col - 1]);
+    if (move.col < cols) boxes.push([move.row, move.col]);
+  }
+  return boxes;
+}
+
+function isBoxComplete(state: GameState, row: number, col: number): boolean {
+  const { rows, cols } = state.config;
+  if (row < 0 || row >= rows || col < 0 || col >= cols) return false;
+  return (
+    state.horizontalEdges[row][col] &&
+    state.horizontalEdges[row + 1][col] &&
+    state.verticalEdges[row][col] &&
+    state.verticalEdges[row][col + 1]
+  );
+}
+
+function applyMoveToGameState(state: GameState, move: { type: "H" | "V"; row: number; col: number }, player: 1 | 2): { newState: GameState; completedBoxes: [number, number][]; success: boolean } {
+  if (state.status !== "playing") return { newState: state, completedBoxes: [], success: false };
+  if (player !== state.currentPlayer) return { newState: state, completedBoxes: [], success: false };
+
+  if (move.type === "H") {
+    if (state.horizontalEdges[move.row][move.col]) return { newState: state, completedBoxes: [], success: false };
+  } else {
+    if (state.verticalEdges[move.row][move.col]) return { newState: state, completedBoxes: [], success: false };
+  }
+
+  const newState: GameState = {
+    ...state,
+    horizontalEdges: state.horizontalEdges.map((row) => [...row]),
+    verticalEdges: state.verticalEdges.map((row) => [...row]),
+    boxes: state.boxes.map((row) => [...row]),
+    scores: [...state.scores] as [number, number],
+    lastMove: null,
+    version: state.version + 1,
+  };
+
+  if (move.type === "H") {
+    newState.horizontalEdges[move.row][move.col] = true;
+  } else {
+    newState.verticalEdges[move.row][move.col] = true;
+  }
+
+  const surroundingBoxes = getSurroundingBoxes(newState, move);
+  const completedBoxes: [number, number][] = [];
+
+  for (const [br, bc] of surroundingBoxes) {
+    if (isBoxComplete(newState, br, bc) && newState.boxes[br][bc] === 0) {
+      newState.boxes[br][bc] = player;
+      newState.scores[player - 1]++;
+      completedBoxes.push([br, bc]);
+    }
+  }
+
+  newState.lastMove = { move, player, completedBoxes };
+  newState.moveCount = state.moveCount + 1;
+
+  if (completedBoxes.length === 0) {
+    newState.currentPlayer = player === 1 ? 2 : 1;
+  }
+
+  const totalBoxes = newState.config.rows * newState.config.cols;
+  const claimedBoxes = newState.scores[0] + newState.scores[1];
+
+  if (claimedBoxes >= totalBoxes) {
+    newState.status = "finished";
+    if (newState.scores[0] > newState.scores[1]) {
+      newState.winner = 1;
+    } else if (newState.scores[1] > newState.scores[0]) {
+      newState.winner = 2;
+    } else {
+      newState.winner = 0;
+    }
+  }
+
+  return { newState, completedBoxes };
+}
+
+function isRateLimited(socketId: string, room: RoomState): boolean {
+  const now = Date.now();
+  let entry = room.moveCounts.get(socketId);
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW) {
+    entry = { count: 0, windowStart: now };
+    room.moveCounts.set(socketId, entry);
+  }
+  entry.count++;
+  return entry.count > MAX_MOVES_PER_WINDOW;
+}
+
+function cleanupEmptyRooms(): void {
+  for (const [code, room] of rooms) {
+    if (room.players.length === 0 && room.spectators.length === 0) {
+      rooms.delete(code);
+    }
+  }
+}
 
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
@@ -94,6 +245,7 @@ function cleanupEmptyRooms(): void {
 }
 
 io.on("connection", (socket) => {
+  console.log(`[DEBUG] Socket Connected: ${socket.id}`);
   socket.on("room:create", ({ config }) => {
     if (rooms.size >= MAX_ROOMS) {
       socket.emit("error", { message: "Server is full. Try again later.", code: "SERVER_FULL" });
@@ -135,7 +287,16 @@ io.on("connection", (socket) => {
     const player = { id: socket.id, name };
     room.players.push(player);
     socket.join(roomCode);
+    console.log(`[DEBUG] Socket ${socket.id} joined room ${roomCode} as ${name} (Player ${room.players.length})`);
+    
+    // Ensure authoritative initial state is given
+    if (!room.gameState) {
+      room.gameState = createInitialGameState(room.config);
+    }
+    
     socket.emit("room:joined", { roomCode, room: { players: room.players, config: room.config } });
+    socket.emit("game:update", { gameState: room.gameState });
+    
     if (room.players.length === 2) {
       socket.to(roomCode).emit("player:joined", { player });
     }
@@ -160,7 +321,11 @@ io.on("connection", (socket) => {
       room.spectators.push(socket.id);
     }
     socket.join(roomCode);
+    console.log(`[DEBUG] Socket ${socket.id} joined room ${roomCode} as spectator`);
     socket.emit("room:joined", { roomCode, room: { players: room.players, config: room.config }, spectator: true });
+    if (room.gameState) {
+      socket.emit("game:update", { gameState: room.gameState });
+    }
   });
 
   socket.on("rooms:list", () => {
@@ -177,11 +342,38 @@ io.on("connection", (socket) => {
 
     const playerIndex = room.players.indexOf(player);
     if (playerIndex === -1) return;
+    const playerNumber = (playerIndex + 1) as 1 | 2;
 
-    if (isRateLimited(socket.id, room)) return;
-    if (!isMoveValid(move, room.config)) return;
+    if (isRateLimited(socket.id, room)) {
+      socket.emit("error", { message: "Rate limited", code: "RATE_LIMITED" });
+      return;
+    }
 
-    io.to(roomCode).emit("move:made", { move, playerId: socket.id, playerNumber: playerIndex + 1 });
+    console.log(`[DEBUG] Move Received from Socket ${socket.id} (Player ${playerNumber}) in room ${roomCode}:`, move);
+
+    if (!isMoveValid(move, room.config)) {
+      console.log(`[DEBUG] Move Rejected: Invalid coordinates from Socket ${socket.id}`);
+      socket.emit("error", { message: "Invalid move", code: "INVALID_MOVE" });
+      return;
+    }
+
+    if (!room.gameState) {
+      room.gameState = createInitialGameState(room.config);
+    }
+
+    const { newState, success } = applyMoveToGameState(room.gameState, move as any, playerNumber);
+    if (!success) {
+      console.log(`[DEBUG] Move Rejected: Invalid state condition (wrong turn or occupied) from Socket ${socket.id}`);
+      socket.emit("error", { message: "Move rejected by server rules", code: "MOVE_REJECTED" });
+      return;
+    }
+
+    room.gameState = newState;
+    const broadcastTime = Date.now();
+    console.log(`[DEBUG] Move Accepted: Player ${playerNumber}. New Version: ${newState.version}, Score: ${newState.scores}, Turn: ${newState.currentPlayer}, Broadcast Time: ${broadcastTime}`);
+    
+    // Broadcast the complete authoritative game state
+    io.to(roomCode).emit("game:update", { gameState: newState, timestamp: broadcastTime });
   });
 
   socket.on("disconnect", () => {

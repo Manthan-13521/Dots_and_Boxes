@@ -10,7 +10,7 @@ import { ArrowLeft, Copy, Wifi, WifiOff, Loader2, Eye, RotateCcw, Trophy, Sparkl
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import type { Move, GameState } from "@/lib/game/types";
-import { createInitialState, applyMove } from "@/lib/game/engine";
+import { createInitialState } from "@/lib/game/engine";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 
@@ -78,10 +78,15 @@ function OnlineRoomContent() {
       });
     });
 
-    s.on("move:made", ({ move, playerNumber }: { move: Move; playerNumber: 1 | 2 }) => {
+    s.on("game:update", ({ gameState: newGameState, timestamp }: { gameState: GameState; timestamp?: number }) => {
+      console.log(`[DEBUG] Received game:update. Version: ${newGameState.version}. BroadcastTime: ${timestamp}, ReceiveTime: ${Date.now()}`);
       setGameState((prev) => {
-        if (!prev || prev.status !== "playing") return prev;
-        return applyMove(prev, move, playerNumber);
+        if (!prev) return newGameState;
+        if (prev.version && newGameState.version && prev.version >= newGameState.version) {
+          console.log(`[DEBUG] Ignored stale update. Local: ${prev.version}, Remote: ${newGameState.version}`);
+          return prev;
+        }
+        return newGameState;
       });
     });
 

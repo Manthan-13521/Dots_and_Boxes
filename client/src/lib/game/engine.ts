@@ -13,6 +13,7 @@ export function createInitialState(config: GameConfig): GameState {
     winner: null,
     lastMove: null,
     moveCount: 0,
+    version: 1,
   };
 }
 
@@ -74,6 +75,7 @@ export function applyMove(state: GameState, move: Move, player: Player): GameSta
     boxes: state.boxes.map((row) => [...row]),
     scores: [...state.scores] as [number, number],
     lastMove: null,
+    version: state.version + 1,
   };
 
   if (move.type === "H") {
